@@ -18,6 +18,17 @@ _WHITESPACE_PATTERN = re.compile(r"\s+")
 _NONSPACE_PATTERN = re.compile(r"\S+")
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 _AUTHOR_CASE_PATTERN = re.compile("^\\w| \\w")
+# A handful of WordPress accounts were registered with the byline text as the
+# login ("By Nayab Iqbal"), so the slug built from that login carries a "by-"
+# the display name never had. _AUTHOR_CLEAN_PATTERN already strips this from
+# names; it cannot be reused on a slug, because it also strips digits and would
+# rewrite the numeric suffix dedupe_slug adds to break collisions.
+#
+# Anchored and dash-terminated on purpose: it must not touch a surname that
+# begins with those letters, and canonicalize_slug has already collapsed the
+# separator, so "By Nayab Iqbal" and "by_nayab_iqbal" both arrive as
+# "by-nayab-iqbal" while "Byrne" arrives as "byrne" and is left alone.
+_AUTHOR_SLUG_BY_PREFIX = re.compile(r"^by-")
 
 class Utility:
   def _obj_data(item):
@@ -51,6 +62,7 @@ class Utility:
       data = Utility._obj_data(author)
       author_id = data.get("id")
       base = Utility.canonicalize_slug(data.get("login")) or Utility.canonicalize_slug(data.get("display_name"))
+      base = _AUTHOR_SLUG_BY_PREFIX.sub("", base)
       data["login"] = Utility.dedupe_slug(used, base, "author", author_id)
 
   def canonicalizeArticleSlugs(articles):
