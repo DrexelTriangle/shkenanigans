@@ -40,6 +40,7 @@ class ArticleTranslator(Translator):
       # once the attachments have been indexed (resolveFeaturedImages).
       "photoURL": self._checkForImg(text),
       "pubDate": data.get('wp:post_date_gmt', DEFAULT_VALUE),
+      "status": self._normalizeStatus(data.get('wp:status')),
       "tags": data.get('category'),
       "categories": [],
       "metadata": data.get('wp:postmeta'),
@@ -79,6 +80,19 @@ class ArticleTranslator(Translator):
     # mentioned the word. Its only visible effect was an empty Sudoku
     # subsection that looked like a broken section page rather than a filter.
     return isTextNotNull and isTitleNotUnderscore
+
+  def _normalizeStatus(self, value):
+    # WordPress publication state. Anything that is not exactly "publish" --
+    # draft, pending, private, future, trash -- is content the newsroom has not
+    # released, and the formatter withholds a pub_date for it.
+    #
+    # Defaults to "publish" when the key is absent so an export that predates
+    # this field still imports its archive as published rather than blanking
+    # ten thousand articles.
+    if value is None:
+      return "publish"
+    normalized = str(value).strip().lower()
+    return normalized or "publish"
 
   def _normalizeCommentStatus(self, value):
     # WordPress exports carry inconsistent casing/whitespace for comment_status

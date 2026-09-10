@@ -126,6 +126,17 @@ class ArticleFormatter(Formatter):
 
         metadata = obj.get("metadata")
 
+        # The CMS reads "published" as a non-null pub_date, so withholding the
+        # date is what makes a WordPress draft arrive as a CMS draft: editable,
+        # dated, and absent from every public path. creation_date above is taken
+        # from the same value before this point, so the timeline survives.
+        #
+        # Absent status means an export from before Extractor collected it;
+        # those import as published, matching the old behaviour.
+        pub_date = self._normalize_datetime(obj.get("pubDate"))
+        if str(obj.get("status", "publish")).strip().lower() != "publish":
+            pub_date = None
+
         return {
             **self._seo_columns(metadata),
             "id": obj.get("id"),
@@ -140,7 +151,7 @@ class ArticleFormatter(Formatter):
             "priority": obj.get("priority"),
             "mod_date": self._normalize_datetime(obj.get("modDate")),
             "photo_url": photo_url,
-            "pub_date": self._normalize_datetime(obj.get("pubDate")),
+            "pub_date": pub_date,
             "tags": obj.get("tags"),
             "categories": obj.get("categories"),
             "metadata": metadata,

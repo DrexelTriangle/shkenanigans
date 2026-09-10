@@ -13,6 +13,10 @@ _POST_ITEM_KEYS = frozenset((
   # The byline for every pre-Co-Authors-Plus post; without it they are authorless.
   "dc:creator",
   "wp:comment_status",
+  # Publication state. Without it every <item> becomes a live article: 16 posts
+  # WordPress was holding as draft, pending or private went public on
+  # thetriangle.org, four of them from its five private posts.
+  "wp:status",
   "description",
   "wp:post_id",
   "wp:post_name",
@@ -52,6 +56,7 @@ _ARTICLE_SCALAR_TAGS = {
   _CONTENT_ENCODED_TAG: "content:encoded",
   _DC_CREATOR_TAG: "dc:creator",
   f"{{{_WP_NS}}}comment_status": "wp:comment_status",
+  f"{{{_WP_NS}}}status": "wp:status",
   f"{{{_WP_NS}}}post_id": "wp:post_id",
   f"{{{_WP_NS}}}post_name": "wp:post_name",
   f"{{{_WP_NS}}}post_modified_gmt": "wp:post_modified_gmt",
