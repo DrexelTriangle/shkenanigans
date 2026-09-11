@@ -112,9 +112,61 @@ class Pipeline:
             )
         self.runStep(f"Writing {name} output...", f"Wrote {name} output", outputAuthors)
 
+    @staticmethod
+    def _authorMatchKey(name):
+        """Normalized display name used to match a guest author to a WP user.
+
+        Exact string equality is not enough: a WP user's display name is often
+        title-cased off the login ("Erik Heyman-meltzer") while the Co-Authors
+        Plus record for the same person is typed by hand ("Erik Heyman-Meltzer").
+        One capital apart is still one person. This is the same normalization
+        the within-pool dedupe already matches on.
+        """
+        if not name:
+            return None
+        return Utility.cleanDocument(name, "similarity")
+
+    @staticmethod
+    def _absorbGuestAuthor(existing, gAuth):
+        """Fold a matched guest author's fields into the WP user record.
+
+        Two deliberately narrow rules:
+          - an empty field is filled from the guest record, which is usually
+            where a real first/last name lives (the email comes from the WP
+            user side almost every time);
+          - a name field that differs from the guest's ONLY by case or
+            punctuation takes the guest's spelling, because that one was typed
+            by a person rather than derived from a login.
+
+        A field that genuinely differs is left alone. A guest record must never
+        be able to rename somebody.
+        """
+        for field in ("display_name", "first_name", "last_name", "email"):
+            incoming = gAuth.data.get(field)
+            if not incoming:
+                continue
+            current = existing.data.get(field)
+            if not current:
+                existing.data[field] = incoming
+            elif field != "email" and current != incoming and (
+                Pipeline._authorMatchKey(current) == Pipeline._authorMatchKey(incoming)
+            ):
+                existing.data[field] = incoming
+
     def combineAndReindexAuthors(self, authors, guestAuthors):
+        """Fold the guest-author pool into the WP-user pool.
+
+        The two pools are sanitized independently, so this is the ONLY place a
+        person represented on both sides gets collapsed into one row. Matching
+        too strictly here emits a second `authors` row for them, and
+        `Utility.canonicalizeAuthorLogins` then disambiguates the colliding
+        logins by appending the row id -- an author slug ending in its own id
+        is the fingerprint of a miss.
+        """
         combined = authors
-        authNames = {auth.data["display_name"] for auth in authors}
+        byName = {}
+        for auth in authors:
+            byName.setdefault(self._authorMatchKey(auth.data["display_name"]), auth)
         usedIds = {
             auth.data["id"]
             for auth in authors
@@ -122,15 +174,18 @@ class Pipeline:
         }
         nextId = (max(usedIds) + 1) if usedIds else 0
         for gAuth in guestAuthors:
-            gAuthName = gAuth.data["display_name"]
-            if gAuthName not in authNames:
-                while nextId in usedIds:
-                    nextId += 1
-                gAuth.data["id"] = nextId
-                usedIds.add(nextId)
+            gAuthKey = self._authorMatchKey(gAuth.data["display_name"])
+            existing = byName.get(gAuthKey)
+            if existing is not None:
+                self._absorbGuestAuthor(existing, gAuth)
+                continue
+            while nextId in usedIds:
                 nextId += 1
-                authNames.add(gAuthName)
-                combined.append(gAuth)
+            gAuth.data["id"] = nextId
+            usedIds.add(nextId)
+            nextId += 1
+            byName[gAuthKey] = gAuth
+            combined.append(gAuth)
         return combined
 
     def sanitizeArticleAuthors(self, translators, allAuthors, best_guess=False):
